@@ -6,6 +6,12 @@
 
 use crate::jdn::jd_utc_to_jde;
 
+/// Canonical apparent solar angular semi-diameter at `1.0 AU` in arcseconds (`959.63"` = `15' 59.63"`).
+pub const SOLAR_SEMIDIAMETER_1AU_ARCSEC: f64 = 959.63;
+
+/// Canonical equatorial horizontal solar parallax at `1.0 AU` in arcseconds (`8.794"`).
+pub const SOLAR_PARALLAX_1AU_ARCSEC: f64 = 8.794;
+
 /// Normalizes any angle in degrees into the canonical interval `[0.0, 360.0)`.
 #[inline]
 pub fn normalize_deg(deg: f64) -> f64 {
@@ -103,4 +109,66 @@ pub fn solar_declination_and_eot(jd_utc: f64) -> (f64, f64) {
     let eot_minutes = eot_rad.to_degrees() * 4.0;
     (dec_deg, eot_minutes)
 }
+
+/// Computes the Earth–Sun radius vector `R` in Astronomical Units (`AU`) at `jd_utc`
+/// using Meeus Ch. 25 elliptic orbit terms plus primary planetary radial perturbations.
+///
+/// Ranges from `~0.98329 AU` at perihelion (early January / Poush-Magh)
+/// to `~1.01671 AU` at aphelion (early July / Asar-Shrawan).
+pub fn solar_radius_vector_au(jd_utc: f64) -> f64 {
+    let jde = jd_utc_to_jde(jd_utc);
+    let t = (jde - 2_451_545.0) / 36_525.0;
+    let t2 = t * t;
+    let t3 = t2 * t;
+
+    // Earth orbital eccentricity e
+    let e = 0.016_708_634 - 0.000_042_037 * t - 0.000_000_126_7 * t2;
+
+    // Solar mean anomaly M
+    let m_deg = normalize_deg(
+        357.529_109_2 + 35_999.050_290_9 * t - 0.000_153_6 * t2 + t3 / 24_490_000.0,
+    );
+    let m = m_deg.to_radians();
+
+    // Equation of the Center C
+    let c_deg = (1.914_602 - 0.004_817 * t - 0.000_014 * t2) * m.sin()
+        + (0.019_993 - 0.000_101 * t) * (2.0 * m).sin()
+        + 0.000_289 * (3.0 * m).sin();
+
+    // Sun's true anomaly ν = M + C
+    let nu_rad = (m_deg + c_deg).to_radians();
+
+    // Unperturbed Keplerian radius vector (Meeus Eq. 25.5)
+    let r_kepler = (1.000_001_018 * (1.0 - e * e)) / (1.0 + e * nu_rad.cos());
+
+    // Primary planetary and lunar radial perturbations (in AU)
+    let p_venus1 = (351.52 + 22_518.443 * t).to_radians();
+    let p_venus2 = (253.14 + 45_036.886 * t).to_radians();
+    let p_jupiter = (20.19 + 32_964.467 * t).to_radians();
+    let p_moon = (297.85 + 445_267.112 * t).to_radians();
+
+    let dr_perturb = 0.000_005_43 * p_venus1.sin()
+        + 0.000_015_75 * p_venus2.sin()
+        + 0.000_016_27 * p_jupiter.sin()
+        + 0.000_030_76 * p_moon.cos();
+
+    r_kepler + dr_perturb
+}
+
+/// Computes the apparent angular semi-diameter of the Sun (`s` in degrees) at `jd_utc`:
+/// `s = (s_0 / R_AU) / 3600`, where `s_0 = 959.63"` at `1 AU`.
+#[inline]
+pub fn solar_semidiameter_deg(jd_utc: f64) -> f64 {
+    let r_au = solar_radius_vector_au(jd_utc);
+    (SOLAR_SEMIDIAMETER_1AU_ARCSEC / 3600.0) / r_au
+}
+
+/// Computes the Sun's equatorial horizontal parallax (`π_☉` in degrees) at `jd_utc`:
+/// `π_☉ = (8.794" / R_AU) / 3600`.
+#[inline]
+pub fn solar_horizontal_parallax_deg(jd_utc: f64) -> f64 {
+    let r_au = solar_radius_vector_au(jd_utc);
+    (SOLAR_PARALLAX_1AU_ARCSEC / 3600.0) / r_au
+}
+
 

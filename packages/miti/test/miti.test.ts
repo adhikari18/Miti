@@ -8,6 +8,9 @@ import {
   kathmanduSunriseJdUtc,
   lahiriPanchangaAyanamsaDeg,
   siderealSolarLongitudeDeg,
+  solarHorizontalParallaxDeg,
+  solarRadiusVectorAu,
+  solarSemidiameterDeg,
 } from '../src/index.js';
 
 describe('Miti Pure-Math Astronomical Bikram Sambat Engine', () => {
@@ -26,6 +29,32 @@ describe('Miti Pure-Math Astronomical Bikram Sambat Engine', () => {
     const ayanamsaJ2000 = lahiriPanchangaAyanamsaDeg(2451545.0);
     expect(ayanamsaJ2000).toBeGreaterThan(23.85);
     expect(ayanamsaJ2000).toBeLessThan(24.15);
+  });
+
+  it('computes Earth-Sun radius vector R_AU and apparent solar semi-diameter (s_0 / R_AU) across perihelion and aphelion', () => {
+    const jdPerihelion = gregorianToJd(2026, 1, 3.5);
+    const jdAphelion = gregorianToJd(2026, 7, 4.5);
+
+    const rPeri = solarRadiusVectorAu(jdPerihelion);
+    const rAph = solarRadiusVectorAu(jdAphelion);
+
+    expect(rPeri).toBeGreaterThan(0.983);
+    expect(rPeri).toBeLessThan(0.9836);
+    expect(rAph).toBeGreaterThan(1.0164);
+    expect(rAph).toBeLessThan(1.017);
+
+    const sdPeriArcsec = solarSemidiameterDeg(jdPerihelion) * 3600;
+    const sdAphArcsec = solarSemidiameterDeg(jdAphelion) * 3600;
+
+    expect(sdPeriArcsec).toBeGreaterThan(975.0);
+    expect(sdPeriArcsec).toBeLessThan(976.5);
+    expect(sdAphArcsec).toBeGreaterThan(943.0);
+    expect(sdAphArcsec).toBeLessThan(944.5);
+    expect(sdPeriArcsec).toBeGreaterThan(sdAphArcsec);
+
+    const parallaxArcsec = solarHorizontalParallaxDeg(jdPerihelion) * 3600;
+    expect(parallaxArcsec).toBeGreaterThan(8.9);
+    expect(parallaxArcsec).toBeLessThan(9.0);
   });
 
   it('converges to sub-arcsecond accuracy for all 12 Rashi Sankranti transits', () => {

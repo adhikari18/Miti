@@ -21,7 +21,10 @@ pub use sankranti::{
     SankrantiEvent, BS_MONTH_NAMES_EN, BS_MONTH_NAMES_NE, RASHI_NAMES_EN,
 };
 pub use sunrise::{kathmandu_sunrise_jd_utc, sankranti_to_civil_day_jd_utc};
-pub use vsop87::apparent_tropical_solar_longitude_deg;
+pub use vsop87::{
+    apparent_tropical_solar_longitude_deg, solar_horizontal_parallax_deg, solar_radius_vector_au,
+    solar_semidiameter_deg, SOLAR_PARALLAX_1AU_ARCSEC, SOLAR_SEMIDIAMETER_1AU_ARCSEC,
+};
 
 #[cfg(test)]
 mod tests {
@@ -53,6 +56,26 @@ mod tests {
             let len = days_in_bs_month(2083, m);
             assert!((29..=32).contains(&len), "Month {m} length {len} out of [29, 32]");
         }
+    }
+
+    #[test]
+    fn test_solar_radius_vector_and_semidiameter() {
+        // Perihelion (~Jan 3, 2026) vs Aphelion (~Jul 4, 2026)
+        let jd_perihelion = gregorian_to_jd(2026, 1, 3.5);
+        let jd_aphelion = gregorian_to_jd(2026, 7, 4.5);
+
+        let r_peri = solar_radius_vector_au(jd_perihelion);
+        let r_aph = solar_radius_vector_au(jd_aphelion);
+
+        assert!(r_peri > 0.9830 && r_peri < 0.9836);
+        assert!(r_aph > 1.0164 && r_aph < 1.0170);
+
+        let sd_peri_arcsec = solar_semidiameter_deg(jd_perihelion) * 3600.0;
+        let sd_aph_arcsec = solar_semidiameter_deg(jd_aphelion) * 3600.0;
+
+        assert!(sd_peri_arcsec > 975.0 && sd_peri_arcsec < 976.5);
+        assert!(sd_aph_arcsec > 943.0 && sd_aph_arcsec < 944.5);
+        assert!(sd_peri_arcsec > sd_aph_arcsec);
     }
 }
 

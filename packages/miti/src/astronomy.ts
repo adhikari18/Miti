@@ -14,6 +14,12 @@ export const NST_OFFSET_DAYS = 5.75 / 24.0;
 export const SUNRISE_ZENITH_DEG = 90.8333;
 export const SIDEREAL_YEAR_DAYS = 365.256363004;
 
+/** Canonical apparent solar angular semi-diameter at `1.0 AU` in arcseconds (`959.63"`). */
+export const SOLAR_SEMIDIAMETER_1AU_ARCSEC = 959.63;
+
+/** Canonical equatorial horizontal solar parallax at `1.0 AU` in arcseconds (`8.794"`). */
+export const SOLAR_PARALLAX_1AU_ARCSEC = 8.794;
+
 export interface GregorianYMD {
   year: number;
   month: number;
@@ -210,6 +216,65 @@ export function solarDeclinationAndEot(jdUtc: number): {
 
   const eotMinutes = eotRad * RAD_TO_DEG * 4.0;
   return { declinationDeg, eotMinutes };
+}
+
+/**
+ * Computes the Earth–Sun radius vector `R` in Astronomical Units (`AU`) at `jdUtc`
+ * using Meeus Ch. 25 elliptic orbit terms plus primary planetary radial perturbations.
+ *
+ * Ranges from `~0.98329 AU` at perihelion (early January) to `~1.01671 AU` at aphelion (early July).
+ */
+export function solarRadiusVectorAu(jdUtc: number): number {
+  const jde = jdUtcToJde(jdUtc);
+  const t = (jde - 2451545.0) / 36525.0;
+  const t2 = t * t;
+  const t3 = t2 * t;
+
+  const e = 0.016708634 - 0.000042037 * t - 0.0000001267 * t2;
+
+  const mDeg = normalizeDeg(
+    357.5291092 + 35999.0502909 * t - 0.0001536 * t2 + t3 / 24490000.0
+  );
+  const m = mDeg * DEG_TO_RAD;
+
+  const cDeg =
+    (1.914602 - 0.004817 * t - 0.000014 * t2) * Math.sin(m) +
+    (0.019993 - 0.000101 * t) * Math.sin(2 * m) +
+    0.000289 * Math.sin(3 * m);
+
+  const nuRad = (mDeg + cDeg) * DEG_TO_RAD;
+  const rKepler = (1.000001018 * (1.0 - e * e)) / (1.0 + e * Math.cos(nuRad));
+
+  const pVenus1 = (351.52 + 22518.443 * t) * DEG_TO_RAD;
+  const pVenus2 = (253.14 + 45036.886 * t) * DEG_TO_RAD;
+  const pJupiter = (20.19 + 32964.467 * t) * DEG_TO_RAD;
+  const pMoon = (297.85 + 445267.112 * t) * DEG_TO_RAD;
+
+  const drPerturb =
+    0.00000543 * Math.sin(pVenus1) +
+    0.00001575 * Math.sin(pVenus2) +
+    0.00001627 * Math.sin(pJupiter) +
+    0.00003076 * Math.cos(pMoon);
+
+  return rKepler + drPerturb;
+}
+
+/**
+ * Computes the apparent angular semi-diameter of the Sun (`s` in degrees) at `jdUtc`:
+ * `s = (s_0 / R_AU) / 3600`, where `s_0 = 959.63"` at `1 AU`.
+ */
+export function solarSemidiameterDeg(jdUtc: number): number {
+  const rAu = solarRadiusVectorAu(jdUtc);
+  return SOLAR_SEMIDIAMETER_1AU_ARCSEC / 3600.0 / rAu;
+}
+
+/**
+ * Computes the Sun's equatorial horizontal parallax (`π_☉` in degrees) at `jdUtc`:
+ * `π_☉ = (8.794" / R_AU) / 3600`.
+ */
+export function solarHorizontalParallaxDeg(jdUtc: number): number {
+  const rAu = solarRadiusVectorAu(jdUtc);
+  return SOLAR_PARALLAX_1AU_ARCSEC / 3600.0 / rAu;
 }
 
 /**
