@@ -22,10 +22,11 @@ pub use sankranti::{
 };
 pub use sunrise::{
     atmospheric_refraction_horizon_deg, geometric_horizon_dip_deg, kathmandu_sunrise_jd_utc,
-    kathmandu_topocentric_sunrise, sankranti_to_civil_day_jd_utc,
-    topocentric_sunrise_zenith_at_jd_deg, topocentric_sunrise_zenith_deg, TopocentricAtmosphere,
-    TopocentricSunriseMetrics, KATHMANDU_ELEVATION_M, KATHMANDU_LAT_DEG, KATHMANDU_LON_DEG,
-    KATHMANDU_PRESSURE_HPA, KATHMANDU_TEMP_CELSIUS,
+    kathmandu_topocentric_sunrise, resolve_sankranti_civil_day, sankranti_to_civil_day_jd_utc,
+    topocentric_sunrise_zenith_at_jd_deg, topocentric_sunrise_zenith_deg,
+    BorderlineSankrantiResolution, TopocentricAtmosphere, TopocentricSunriseMetrics,
+    BORDERLINE_CUTOFF_WINDOW_MINUTES, CIVIL_CUTOFF_NST_FRACTION, KATHMANDU_ELEVATION_M,
+    KATHMANDU_LAT_DEG, KATHMANDU_LON_DEG, KATHMANDU_PRESSURE_HPA, KATHMANDU_TEMP_CELSIUS,
 };
 pub use vsop87::{
     apparent_tropical_solar_longitude_deg, solar_horizontal_parallax_deg, solar_radius_vector_au,
@@ -120,6 +121,27 @@ mod tests {
         assert!(winter.altitude_advance_seconds > 260.0 && winter.altitude_advance_seconds < 320.0);
         assert!(summer.sunrise_jd_utc < summer.sea_level_sunrise_jd_utc);
         assert!(winter.sunrise_jd_utc < winter.sea_level_sunrise_jd_utc);
+    }
+
+    #[test]
+    fn test_borderline_sankranti_civil_cutoff_resolution() {
+        // Construct a synthetic borderline transit ~2.1 minutes before the 23:48:28.8 NST cutoff (nst_fraction = 0.9905)
+        let base_jd_nst_midnight = 2_461_346.5 - (5.75 / 24.0);
+        let borderline_transit_jd = base_jd_nst_midnight + 0.9905;
+
+        let ktm_res =
+            resolve_sankranti_civil_day(borderline_transit_jd, TopocentricAtmosphere::kathmandu());
+        let sea_res =
+            resolve_sankranti_civil_day(borderline_transit_jd, TopocentricAtmosphere::sea_level());
+
+        assert!(ktm_res.is_borderline);
+        assert!(ktm_res.cutoff_margin_minutes.abs() <= BORDERLINE_CUTOFF_WINDOW_MINUTES);
+        // At 1,400m Kathmandu (856 hPa), transit is before the cutoff -> Gate 1 stays on current day,
+        // whereas flat sea-level horizon rolls Gate 1 to the following day (+1.0 JD).
+        assert_eq!(
+            sea_res.civil_start_jd_utc - ktm_res.civil_start_jd_utc,
+            1.0
+        );
     }
 }
 

@@ -38,6 +38,12 @@ pub const HORIZON_DIP_COEFF_DEG: f64 = 0.0293;
 /// Standard sea-level atmospheric refraction at the horizon (`34'` = `0.566667°` at `1010 hPa`, `10 °C`).
 pub const STANDARD_HORIZON_REFRACTION_DEG: f64 = 34.0 / 60.0;
 
+/// Canonical NST civil transition cutoff fraction (`0.992` ≈ `23:48:28.8 NST`).
+pub const CIVIL_CUTOFF_NST_FRACTION: f64 = 0.992;
+
+/// Borderline Sankranti transit sensitivity window (`±4.0` minutes around the civil cutoff).
+pub const BORDERLINE_CUTOFF_WINDOW_MINUTES: f64 = 4.0;
+
 /// Computes the elevation-dependent geometric horizon depression angle `Δd` in degrees:
 /// `Δd = 0.0293° * √max(0, elevation_m)`.
 ///
@@ -231,6 +237,90 @@ pub fn kathmandu_sunrise_jd_utc(jd_utc_midnight: f64) -> f64 {
         .sunrise_jd_utc
 }
 
+/// Diagnostic resolution for a Sankranti solar transit relative to the Kathmandu civil cutoff,
+/// including topocentric horizon dip (`Δd = 0.0293°√h`), barometric refraction (`856 hPa`),
+/// and apparent solar semi-diameter (`s_0 / R_AU`) corrections for borderline transits (`±4 min`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BorderlineSankrantiResolution {
+    /// Resolved 00:00 UTC Julian Day of the first civil day (*Gate 1* / १ गते).
+    pub civil_start_jd_utc: f64,
+    /// Uncorrected sea-level civil start 00:00 UTC Julian Day (without `1,400 m` elevation dip).
+    pub sea_level_civil_start_jd_utc: f64,
+    /// Signed time margin in minutes (`transit_nst - cutoff_nst`); `< 0` stays on current day, `> 0` rolls to next day.
+    pub cutoff_margin_minutes: f64,
+    /// `true` if the Sankranti occurs within `±4.0` minutes of the civil transition cutoff.
+    pub is_borderline: bool,
+    /// Topocentric cutoff shift in seconds induced by elevation dip, pressure refraction, and `s_0 / R_AU`.
+    pub topocentric_cutoff_shift_seconds: f64,
+    /// High-altitude topocentric sunrise metrics on the resolved *Gate 1* morning.
+    pub sunrise_metrics: TopocentricSunriseMetrics,
+}
+
+/// Resolves an astronomical Sankranti transit (`transit_jd_utc`) to its Bikram Sambat
+/// civil start day (*Gate 1* / १ गते) using topocentric horizon dip (`Δd = 0.0293°√h`),
+/// barometric pressure (`856 hPa`), and apparent solar semi-diameter (`s_0 / R_AU`)
+/// calibration for borderline transits within `±4` minutes of the civil cutoff.
+pub fn resolve_sankranti_civil_day(
+    transit_jd_utc: f64,
+    atmosphere: TopocentricAtmosphere,
+) -> BorderlineSankrantiResolution {
+    let jd_nst_shifted = transit_jd_utc + 0.5 + NST_OFFSET_DAYS;
+    let civil_day_index = jd_nst_shifted.floor();
+    let nst_fraction = jd_nst_shifted - civil_day_index;
+
+    // Reference Kathmandu mean topocentric zenith vs. date- and station-specific topocentric zenith
+    let z_ref_ktm = topocentric_sunrise_zenith_deg(
+        KATHMANDU_ELEVATION_M,
+        KATHMANDU_PRESSURE_HPA,
+        KATHMANDU_TEMP_CELSIUS,
+    );
+    let z_actual = topocentric_sunrise_zenith_at_jd_deg(
+        transit_jd_utc,
+        atmosphere.elevation_m,
+        atmosphere.pressure_hpa,
+        atmosphere.temp_celsius,
+    );
+    let z_sea_level = topocentric_sunrise_zenith_at_jd_deg(transit_jd_utc, 0.0, 1_010.0, 10.0);
+
+    // 1° of zenith depression corresponds to 4 minutes (240 s) of diurnal hour-angle rotation
+    let delta_z_from_ktm_ref = z_actual - z_ref_ktm;
+    let delta_z_from_sea_level = z_actual - z_sea_level;
+
+    let topocentric_shift_days = delta_z_from_ktm_ref * (4.0 / 1_440.0);
+    let sea_level_shift_days = (z_sea_level - z_ref_ktm) * (4.0 / 1_440.0);
+
+    let effective_cutoff_fraction = CIVIL_CUTOFF_NST_FRACTION + topocentric_shift_days;
+    let sea_level_cutoff_fraction = CIVIL_CUTOFF_NST_FRACTION + sea_level_shift_days;
+
+    let cutoff_margin_minutes = (nst_fraction - effective_cutoff_fraction) * 1_440.0;
+    let is_borderline = cutoff_margin_minutes.abs() <= BORDERLINE_CUTOFF_WINDOW_MINUTES;
+
+    let effective_day_index = if nst_fraction > effective_cutoff_fraction {
+        civil_day_index + 1.0
+    } else {
+        civil_day_index
+    };
+
+    let sea_level_day_index = if nst_fraction > sea_level_cutoff_fraction {
+        civil_day_index + 1.0
+    } else {
+        civil_day_index
+    };
+
+    let civil_start_jd_utc = effective_day_index - 0.5;
+    let sea_level_civil_start_jd_utc = sea_level_day_index - 0.5;
+    let sunrise_metrics = kathmandu_topocentric_sunrise(civil_start_jd_utc, atmosphere);
+
+    BorderlineSankrantiResolution {
+        civil_start_jd_utc,
+        sea_level_civil_start_jd_utc,
+        cutoff_margin_minutes,
+        is_borderline,
+        topocentric_cutoff_shift_seconds: delta_z_from_sea_level * 240.0,
+        sunrise_metrics,
+    }
+}
+
 /// Maps an astronomical Sankranti transit instant (`transit_jd_utc`) to the integer
 /// Julian Day (at 00:00 UTC) of the first civil day (*Gate 1* / १ गते) of the new Bikram Sambat month.
 ///
@@ -239,21 +329,7 @@ pub fn kathmandu_sunrise_jd_utc(jd_utc_midnight: f64) -> f64 {
 /// inaugurates *Gate 1* on that same civil date; a transit after the threshold inaugurates
 /// *Gate 1* on the following civil sunrise.
 pub fn sankranti_to_civil_day_jd_utc(transit_jd_utc: f64) -> f64 {
-    // Convert transit JD (where .0 is 12:00 UTC) to NST civil day index
-    // Adding 0.5 shifts origin from 12:00 UTC to 00:00 UTC; adding NST_OFFSET_DAYS shifts to 00:00 NST.
-    let jd_nst_shifted = transit_jd_utc + 0.5 + NST_OFFSET_DAYS;
-    let civil_day_index = jd_nst_shifted.floor();
-    let nst_fraction = jd_nst_shifted - civil_day_index;
-
-    // Civil midnight / Aparahna-Madhyaratri cutoff in NST:
-    // If transit occurs after 23:48 NST (fraction > 0.992), roll to next civil sunrise day.
-    let effective_day_index = if nst_fraction > 0.992 {
-        civil_day_index + 1.0
-    } else {
-        civil_day_index
-    };
-
-    // Return the 00:00 UTC Julian Day corresponding to that civil date
-    effective_day_index - 0.5
+    resolve_sankranti_civil_day(transit_jd_utc, TopocentricAtmosphere::kathmandu())
+        .civil_start_jd_utc
 }
 

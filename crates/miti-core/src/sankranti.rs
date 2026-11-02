@@ -6,7 +6,7 @@
 
 use crate::ayanamsa::{lahiri_panchanga_ayanamsa_deg, sidereal_solar_longitude_deg};
 use crate::jdn::{gregorian_to_jd, GregorianDate};
-use crate::sunrise::{kathmandu_sunrise_jd_utc, sankranti_to_civil_day_jd_utc};
+use crate::sunrise::{resolve_sankranti_civil_day, TopocentricAtmosphere};
 use crate::vsop87::signed_angle_diff;
 
 /// Mean length of the sidereal year in days.
@@ -58,6 +58,10 @@ pub struct SankrantiEvent {
     pub civil_start_jd_utc: f64,
     /// Chitra Paksha / Lahiri Ayanamsa (in degrees) at the transit instant.
     pub ayanamsa_deg: f64,
+    /// Signed time margin in minutes (`transit_nst - cutoff_nst`) relative to the civil cutoff.
+    pub cutoff_margin_minutes: f64,
+    /// `true` if the Sankranti transit occurs within `±4.0` minutes of the civil cutoff.
+    pub is_borderline_transit: bool,
 }
 
 /// Represents a resolved Bikram Sambat (B.S.) civil date.
@@ -115,8 +119,7 @@ pub fn find_sankranti_transit_jd(bs_year: i32, bs_month: u8) -> SankrantiEvent {
         jd += step;
     }
 
-    let civil_start_jd_utc = sankranti_to_civil_day_jd_utc(jd);
-    let kathmandu_sunrise_jd_utc = kathmandu_sunrise_jd_utc(civil_start_jd_utc);
+    let resolution = resolve_sankranti_civil_day(jd, TopocentricAtmosphere::kathmandu());
     let ayanamsa_deg = lahiri_panchanga_ayanamsa_deg(jd);
 
     SankrantiEvent {
@@ -124,9 +127,11 @@ pub fn find_sankranti_transit_jd(bs_year: i32, bs_month: u8) -> SankrantiEvent {
         bs_month,
         target_longitude_deg: target_deg,
         transit_jd_utc: jd,
-        kathmandu_sunrise_jd_utc,
-        civil_start_jd_utc,
+        kathmandu_sunrise_jd_utc: resolution.sunrise_metrics.sunrise_jd_utc,
+        civil_start_jd_utc: resolution.civil_start_jd_utc,
         ayanamsa_deg,
+        cutoff_margin_minutes: resolution.cutoff_margin_minutes,
+        is_borderline_transit: resolution.is_borderline,
     }
 }
 

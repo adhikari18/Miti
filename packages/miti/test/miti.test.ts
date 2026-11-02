@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BORDERLINE_CUTOFF_WINDOW_MINUTES,
+  KATHMANDU_DEFAULT_ATMOSPHERE,
   KATHMANDU_ELEVATION_M,
   KATHMANDU_PRESSURE_HPA,
   KATHMANDU_TEMP_CELSIUS,
   Miti,
+  SEA_LEVEL_STANDARD_ATMOSPHERE,
   apparentTropicalSolarLongitudeDeg,
   atmosphericRefractionHorizonDeg,
   findSankrantiTransit,
@@ -13,6 +16,7 @@ import {
   kathmanduSunriseJdUtc,
   kathmanduTopocentricSunrise,
   lahiriPanchangaAyanamsaDeg,
+  resolveSankrantiCivilDay,
   siderealSolarLongitudeDeg,
   solarHorizontalParallaxDeg,
   solarRadiusVectorAu,
@@ -140,6 +144,35 @@ describe('Miti Pure-Math Astronomical Bikram Sambat Engine', () => {
 
     expect(summer.sunriseJdUtc).toBeLessThan(summer.seaLevelSunriseJdUtc);
     expect(winter.sunriseJdUtc).toBeLessThan(winter.seaLevelSunriseJdUtc);
+  });
+
+  it('resolves borderline Sankranti transits within ±4 minutes of the civil cutoff using 1,400m topocentric calibration', () => {
+    // Construct a borderline transit ~2.1 minutes before the 23:48:28.8 NST cutoff (nstFraction = 0.9905)
+    const baseJdNstMidnight = gregorianToJd(2026, 11, 2) - 5.75 / 24.0;
+    const borderlineTransitJd = baseJdNstMidnight + 0.9905;
+
+    const ktmRes = resolveSankrantiCivilDay(
+      borderlineTransitJd,
+      KATHMANDU_DEFAULT_ATMOSPHERE
+    );
+    const seaRes = resolveSankrantiCivilDay(
+      borderlineTransitJd,
+      SEA_LEVEL_STANDARD_ATMOSPHERE
+    );
+
+    expect(ktmRes.isBorderline).toBe(true);
+    expect(Math.abs(ktmRes.cutoffMarginMinutes)).toBeLessThanOrEqual(
+      BORDERLINE_CUTOFF_WINDOW_MINUTES
+    );
+    expect(ktmRes.topocentricCutoffShiftSeconds).toBeGreaterThan(230);
+    expect(ktmRes.topocentricCutoffShiftSeconds).toBeLessThan(250);
+
+    // Under 1,400m Kathmandu topocentric calibration, Gate 1 remains on day D,
+    // whereas uncorrected sea-level horizon rolls Gate 1 to day D + 1.
+    expect(seaRes.civilStartJdUtc - ktmRes.civilStartJdUtc).toBe(1.0);
+    expect(
+      Miti.resolveBorderlineSankranti(borderlineTransitJd).civilStartJdUtc
+    ).toBe(ktmRes.civilStartJdUtc);
   });
 
   it('converts 2026-11-02 to 2083-07-17 (२०८३-०७-१७ Kartik 17, 2083 B.S.) and formats tokens', () => {

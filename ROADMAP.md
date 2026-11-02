@@ -6,7 +6,7 @@ This document outlines the post-MVP multi-phase engineering and computational as
 
 ## Phase 1: Historical Calibration, Topocentric Refraction & Anomaly Patch Layer (~20 hrs)
 
-- [ ] **1.1 High-Altitude Atmospheric Refraction & Horizon Dip Solver (`1,400m` Kathmandu) (~5 hrs):**
+- [x] **1.1 High-Altitude Atmospheric Refraction & Horizon Dip Solver (`1,400m` Kathmandu) (~5 hrs):**
   - Enhance `crates/miti-core/src/sunrise.rs` and `packages/miti/src/astronomy.ts` with elevation-dependent geometric horizon depression ($\Delta d = 0.0293^\circ \sqrt{h}$), barometric pressure ($856\text{ hPa}$), and solar semi-diameter ($s_0 / R_{\text{AU}}$) corrections for borderline *Sankranti* transits occurring within $\pm 4$ minutes of the civil cutoff.
 - [ ] **1.2 Classical *Surya Siddhanta* vs. Modern *Drik* Ephemeris Mode Switch (~5 hrs):**
   - Implement the traditional *Surya Siddhanta* mean-motion and epicyclic (*Manda Paridhi*) solar equation alongside the modern VSOP87 *Drik* solver so historians can reproduce pre-2000 B.S. *Panchanga* rulings that relied on classical Siddhantic tables.

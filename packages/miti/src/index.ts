@@ -1,13 +1,15 @@
 import {
   gregorianToJd,
   jdToGregorian,
-  kathmanduSunriseJdUtc,
+  KATHMANDU_DEFAULT_ATMOSPHERE,
   lahiriPanchangaAyanamsaDeg,
-  sankrantiToCivilDayJdUtc,
+  resolveSankrantiCivilDay,
   SIDEREAL_YEAR_DAYS,
   siderealSolarLongitudeDeg,
   signedAngleDiff,
+  type BorderlineSankrantiResolution,
   type GregorianYMD,
+  type TopocentricAtmosphere,
 } from './astronomy.js';
 
 export * from './astronomy.js';
@@ -134,6 +136,10 @@ export interface SankrantiEvent {
   civilStartGregorian: GregorianYMD;
   /** Chitra Paksha / Lahiri Ayanamsa in degrees at the transit instant. */
   ayanamsaDeg: number;
+  /** Signed time margin in minutes (`transitNst - cutoffNst`) relative to the Kathmandu civil cutoff. */
+  cutoffMarginMinutes: number;
+  /** `true` if the Sankranti transit occurs within `±4.0` minutes of the civil transition cutoff. */
+  isBorderlineTransit: boolean;
 }
 
 /**
@@ -187,8 +193,9 @@ export function findSankrantiTransit(bsYear: number, bsMonth: number): Sankranti
     jd += diffDeg / velocity;
   }
 
-  const civilStartJdUtc = sankrantiToCivilDayJdUtc(jd);
-  const kathmanduSunriseJd = kathmanduSunriseJdUtc(civilStartJdUtc);
+  const resolution = resolveSankrantiCivilDay(jd, KATHMANDU_DEFAULT_ATMOSPHERE);
+  const civilStartJdUtc = resolution.civilStartJdUtc;
+  const kathmanduSunriseJd = resolution.sunriseMetrics.sunriseJdUtc;
   const ayanamsaDeg = lahiriPanchangaAyanamsaDeg(jd);
   const civilStartGregorian = jdToGregorian(civilStartJdUtc);
 
@@ -204,6 +211,8 @@ export function findSankrantiTransit(bsYear: number, bsMonth: number): Sankranti
     civilStartJdUtc,
     civilStartGregorian,
     ayanamsaDeg: Math.round(ayanamsaDeg * 1e6) / 1e6,
+    cutoffMarginMinutes: Math.round(resolution.cutoffMarginMinutes * 1e4) / 1e4,
+    isBorderlineTransit: resolution.isBorderline,
   };
 
   sankrantiCache.set(cacheKey, event);
@@ -511,6 +520,18 @@ export const Miti = {
    */
   getMonthLengths(bsYear: number): number[] {
     return Array.from({ length: 12 }, (_, idx) => daysInBsMonth(bsYear, idx + 1));
+  },
+
+  /**
+   * Resolves a Sankranti transit instant (`transitJdUtc`) with high-altitude topocentric
+   * refraction (`856 hPa`), horizon dip (`1,400m`), and solar semi-diameter (`s_0 / R_AU`)
+   * calibration for borderline transits occurring within `±4` minutes of the civil cutoff.
+   */
+  resolveBorderlineSankranti(
+    transitJdUtc: number,
+    atmosphere: TopocentricAtmosphere = KATHMANDU_DEFAULT_ATMOSPHERE
+  ): BorderlineSankrantiResolution {
+    return resolveSankrantiCivilDay(transitJdUtc, atmosphere);
   },
 
   toDevanagariDigits,
