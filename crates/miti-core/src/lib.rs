@@ -20,7 +20,12 @@ pub use sankranti::{
     days_in_bs_month, find_sankranti_transit_jd, gregorian_to_miti, miti_to_gregorian, MitiDate,
     SankrantiEvent, BS_MONTH_NAMES_EN, BS_MONTH_NAMES_NE, RASHI_NAMES_EN,
 };
-pub use sunrise::{kathmandu_sunrise_jd_utc, sankranti_to_civil_day_jd_utc};
+pub use sunrise::{
+    atmospheric_refraction_horizon_deg, geometric_horizon_dip_deg, kathmandu_sunrise_jd_utc,
+    sankranti_to_civil_day_jd_utc, topocentric_sunrise_zenith_at_jd_deg,
+    topocentric_sunrise_zenith_deg, KATHMANDU_ELEVATION_M, KATHMANDU_LAT_DEG, KATHMANDU_LON_DEG,
+    KATHMANDU_PRESSURE_HPA, KATHMANDU_TEMP_CELSIUS,
+};
 pub use vsop87::{
     apparent_tropical_solar_longitude_deg, solar_horizontal_parallax_deg, solar_radius_vector_au,
     solar_semidiameter_deg, SOLAR_PARALLAX_1AU_ARCSEC, SOLAR_SEMIDIAMETER_1AU_ARCSEC,
@@ -76,6 +81,27 @@ mod tests {
         assert!(sd_peri_arcsec > 975.0 && sd_peri_arcsec < 976.5);
         assert!(sd_aph_arcsec > 943.0 && sd_aph_arcsec < 944.5);
         assert!(sd_peri_arcsec > sd_aph_arcsec);
+    }
+
+    #[test]
+    fn test_topocentric_horizon_dip_and_refraction() {
+        let dip_ktm = geometric_horizon_dip_deg(KATHMANDU_ELEVATION_M);
+        assert!((dip_ktm - 1.096306).abs() < 1e-4);
+        assert_eq!(geometric_horizon_dip_deg(0.0), 0.0);
+
+        let refr_sea = atmospheric_refraction_horizon_deg(1010.0, 10.0);
+        let refr_ktm =
+            atmospheric_refraction_horizon_deg(KATHMANDU_PRESSURE_HPA, KATHMANDU_TEMP_CELSIUS);
+        assert!((refr_sea - 34.0 / 60.0).abs() < 1e-6);
+        assert!(refr_ktm > 0.45 && refr_ktm < 0.48);
+        assert!(refr_ktm < refr_sea);
+
+        let z_ktm = topocentric_sunrise_zenith_deg(
+            KATHMANDU_ELEVATION_M,
+            KATHMANDU_PRESSURE_HPA,
+            KATHMANDU_TEMP_CELSIUS,
+        );
+        assert!(z_ktm > 91.80 && z_ktm < 91.86);
     }
 }
 

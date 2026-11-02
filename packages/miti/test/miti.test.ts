@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  KATHMANDU_ELEVATION_M,
+  KATHMANDU_PRESSURE_HPA,
+  KATHMANDU_TEMP_CELSIUS,
   Miti,
   apparentTropicalSolarLongitudeDeg,
+  atmosphericRefractionHorizonDeg,
   findSankrantiTransit,
+  geometricHorizonDipDeg,
   gregorianToJd,
   jdToGregorian,
   kathmanduSunriseJdUtc,
@@ -11,6 +16,8 @@ import {
   solarHorizontalParallaxDeg,
   solarRadiusVectorAu,
   solarSemidiameterDeg,
+  topocentricSunriseZenithAtJdDeg,
+  topocentricSunriseZenithDeg,
 } from '../src/index.js';
 
 describe('Miti Pure-Math Astronomical Bikram Sambat Engine', () => {
@@ -55,6 +62,38 @@ describe('Miti Pure-Math Astronomical Bikram Sambat Engine', () => {
     const parallaxArcsec = solarHorizontalParallaxDeg(jdPerihelion) * 3600;
     expect(parallaxArcsec).toBeGreaterThan(8.9);
     expect(parallaxArcsec).toBeLessThan(9.0);
+  });
+
+  it('computes elevation horizon dip (Δd = 0.0293°√h) and 856 hPa barometric refraction for 1,400m Kathmandu', () => {
+    const dipKtm = geometricHorizonDipDeg(KATHMANDU_ELEVATION_M);
+    expect(dipKtm).toBeCloseTo(1.096306, 5);
+    expect(geometricHorizonDipDeg(0)).toBe(0);
+
+    const refrSea = atmosphericRefractionHorizonDeg(1010.0, 10.0);
+    const refrKtm = atmosphericRefractionHorizonDeg(
+      KATHMANDU_PRESSURE_HPA,
+      KATHMANDU_TEMP_CELSIUS
+    );
+    expect(refrSea).toBeCloseTo(34.0 / 60.0, 6);
+    expect(refrKtm).toBeGreaterThan(0.46);
+    expect(refrKtm).toBeLessThan(0.475);
+    expect(refrKtm).toBeLessThan(refrSea);
+
+    const zMeanKtm = topocentricSunriseZenithDeg(
+      KATHMANDU_ELEVATION_M,
+      KATHMANDU_PRESSURE_HPA,
+      KATHMANDU_TEMP_CELSIUS
+    );
+    expect(zMeanKtm).toBeGreaterThan(91.82);
+    expect(zMeanKtm).toBeLessThan(91.84);
+
+    // At perihelion (larger solar semi-diameter), topocentric sunrise zenith is larger than at aphelion
+    const jdPeri = gregorianToJd(2026, 1, 3.5);
+    const jdAph = gregorianToJd(2026, 7, 4.5);
+    const zPeri = topocentricSunriseZenithAtJdDeg(jdPeri);
+    const zAph = topocentricSunriseZenithAtJdDeg(jdAph);
+    expect(zPeri).toBeGreaterThan(zAph);
+    expect((zPeri - zAph) * 3600).toBeCloseTo(32.0, 0);
   });
 
   it('converges to sub-arcsecond accuracy for all 12 Rashi Sankranti transits', () => {

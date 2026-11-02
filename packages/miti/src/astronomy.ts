@@ -10,8 +10,13 @@
 
 export const KATHMANDU_LAT_DEG = 27.7172;
 export const KATHMANDU_LON_DEG = 85.324;
+export const KATHMANDU_ELEVATION_M = 1400.0;
+export const KATHMANDU_PRESSURE_HPA = 856.0;
+export const KATHMANDU_TEMP_CELSIUS = 18.0;
 export const NST_OFFSET_DAYS = 5.75 / 24.0;
 export const SUNRISE_ZENITH_DEG = 90.8333;
+export const HORIZON_DIP_COEFF_DEG = 0.0293;
+export const STANDARD_HORIZON_REFRACTION_DEG = 34.0 / 60.0;
 export const SIDEREAL_YEAR_DAYS = 365.256363004;
 
 /** Canonical apparent solar angular semi-diameter at `1.0 AU` in arcseconds (`959.63"`). */
@@ -275,6 +280,73 @@ export function solarSemidiameterDeg(jdUtc: number): number {
 export function solarHorizontalParallaxDeg(jdUtc: number): number {
   const rAu = solarRadiusVectorAu(jdUtc);
   return SOLAR_PARALLAX_1AU_ARCSEC / 3600.0 / rAu;
+}
+
+/**
+ * Computes the elevation-dependent geometric horizon depression angle `Δd` in degrees:
+ * `Δd = 0.0293° * √max(0, elevationM)`.
+ *
+ * At Kathmandu's elevation (`1,400 m`), `Δd ≈ 1.096306°` (`1° 05' 47"`).
+ */
+export function geometricHorizonDipDeg(elevationM: number): number {
+  const clampedH = elevationM > 0 ? elevationM : 0;
+  return HORIZON_DIP_COEFF_DEG * Math.sqrt(clampedH);
+}
+
+/**
+ * Computes topocentric atmospheric refraction `R_atm` (in degrees) at the horizon,
+ * scaled for local barometric pressure `pressureHpa` (in hPa) and ambient temperature
+ * `tempCelsius` (in °C) per Meeus Ch. 16 / Saemundsson-Bennett relation:
+ *
+ * `R_atm = (34' / 60) * (P / 1010.0) * (283.0 / (273.0 + T))`
+ */
+export function atmosphericRefractionHorizonDeg(
+  pressureHpa: number,
+  tempCelsius: number
+): number {
+  const pFactor = Math.max(0, pressureHpa) / 1010.0;
+  const kelvin = Math.max(150.0, 273.0 + tempCelsius);
+  const tFactor = 283.0 / kelvin;
+  return STANDARD_HORIZON_REFRACTION_DEG * pFactor * tFactor;
+}
+
+/**
+ * Computes the topocentric apparent upper-limb sunrise zenith distance (`Z` in degrees)
+ * for an observer at `elevationM`, `pressureHpa`, and `tempCelsius` using mean `1 AU`
+ * solar semi-diameter (`s_0 = 959.63"`) and horizontal parallax (`π_0 = 8.794"`):
+ *
+ * `Z = 90° + Δd(h) + R_atm(P, T) + (s_0 - π_0) / 3600`
+ */
+export function topocentricSunriseZenithDeg(
+  elevationM: number = KATHMANDU_ELEVATION_M,
+  pressureHpa: number = KATHMANDU_PRESSURE_HPA,
+  tempCelsius: number = KATHMANDU_TEMP_CELSIUS
+): number {
+  const dipDeg = geometricHorizonDipDeg(elevationM);
+  const refractionDeg = atmosphericRefractionHorizonDeg(pressureHpa, tempCelsius);
+  const meanSdMinusParallaxDeg =
+    (SOLAR_SEMIDIAMETER_1AU_ARCSEC - SOLAR_PARALLAX_1AU_ARCSEC) / 3600.0;
+  return 90.0 + dipDeg + refractionDeg + meanSdMinusParallaxDeg;
+}
+
+/**
+ * Computes the date-specific topocentric apparent sunrise zenith distance (`Z` in degrees)
+ * at `jdUtc`, incorporating Earth–Sun radius vector variation `s(JD) = s_0 / R_AU(JD)`
+ * and solar horizontal parallax `π_☉(JD) = π_0 / R_AU(JD)`:
+ *
+ * `Z(JD) = 90° + Δd(h) + R_atm(P, T) + s(JD) - π_☉(JD)`
+ */
+export function topocentricSunriseZenithAtJdDeg(
+  jdUtc: number,
+  elevationM: number = KATHMANDU_ELEVATION_M,
+  pressureHpa: number = KATHMANDU_PRESSURE_HPA,
+  tempCelsius: number = KATHMANDU_TEMP_CELSIUS
+): number {
+  const dipDeg = geometricHorizonDipDeg(elevationM);
+  const refractionDeg = atmosphericRefractionHorizonDeg(pressureHpa, tempCelsius);
+  const sdDeg = solarSemidiameterDeg(jdUtc);
+  const parallaxDeg = solarHorizontalParallaxDeg(jdUtc);
+  return 90.0 + dipDeg + refractionDeg + sdDeg - parallaxDeg;
 }
 
 /**
