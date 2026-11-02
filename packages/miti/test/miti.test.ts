@@ -11,6 +11,7 @@ import {
   gregorianToJd,
   jdToGregorian,
   kathmanduSunriseJdUtc,
+  kathmanduTopocentricSunrise,
   lahiriPanchangaAyanamsaDeg,
   siderealSolarLongitudeDeg,
   solarHorizontalParallaxDeg,
@@ -116,6 +117,29 @@ describe('Miti Pure-Math Astronomical Bikram Sambat Engine', () => {
     const nstHours = utcHours + 5.75;
     expect(nstHours).toBeGreaterThan(5.0);
     expect(nstHours).toBeLessThan(7.0);
+  });
+
+  it('verifies the 1,400m high-altitude sunrise shift (in seconds) across summer and winter solstices', () => {
+    const jdSummerSolstice = gregorianToJd(2026, 6, 21);
+    const jdWinterSolstice = gregorianToJd(2026, 12, 21);
+    const jdVernalEquinox = gregorianToJd(2026, 3, 20);
+
+    const summer = kathmanduTopocentricSunrise(jdSummerSolstice);
+    const winter = kathmanduTopocentricSunrise(jdWinterSolstice);
+    const equinox = kathmanduTopocentricSunrise(jdVernalEquinox);
+
+    // At 1,400m in Kathmandu (Δd ≈ 1.096°, P = 856 hPa), sunrise occurs ~260–315 seconds (~4.4–5.2 min) earlier
+    expect(summer.altitudeAdvanceSeconds).toBeGreaterThan(260);
+    expect(summer.altitudeAdvanceSeconds).toBeLessThan(320);
+    expect(winter.altitudeAdvanceSeconds).toBeGreaterThan(260);
+    expect(winter.altitudeAdvanceSeconds).toBeLessThan(320);
+
+    // Oblique solar track at the solstices yields a larger time shift (in seconds) than at the equinox
+    expect(summer.altitudeAdvanceSeconds).toBeGreaterThan(equinox.altitudeAdvanceSeconds);
+    expect(winter.altitudeAdvanceSeconds).toBeGreaterThan(equinox.altitudeAdvanceSeconds);
+
+    expect(summer.sunriseJdUtc).toBeLessThan(summer.seaLevelSunriseJdUtc);
+    expect(winter.sunriseJdUtc).toBeLessThan(winter.seaLevelSunriseJdUtc);
   });
 
   it('converts 2026-11-02 to 2083-07-17 (२०८३-०७-१७ Kartik 17, 2083 B.S.) and formats tokens', () => {

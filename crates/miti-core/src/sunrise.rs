@@ -98,29 +98,137 @@ pub fn topocentric_sunrise_zenith_at_jd_deg(
     90.0 + dip_deg + refraction_deg + sd_deg - parallax_deg
 }
 
-/// Computes the exact UTC Julian Day of local sunrise in Kathmandu for a civil date
-/// whose UTC midnight is `jd_utc_midnight`.
-pub fn kathmandu_sunrise_jd_utc(jd_utc_midnight: f64) -> f64 {
-    // Evaluate solar declination and Equation of Time near 06:00 NST (00:15 UTC)
-    let jd_probe = jd_utc_midnight + 0.01;
-    let (dec_deg, eot_minutes) = solar_declination_and_eot(jd_probe);
+/// Topocentric atmospheric and elevation parameters for an observing station.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TopocentricAtmosphere {
+    /// Observer elevation above mean sea level in meters (`1,400 m` for Kathmandu).
+    pub elevation_m: f64,
+    /// Local barometric pressure in hectopascals (`856.0 hPa` for Kathmandu).
+    pub pressure_hpa: f64,
+    /// Local ambient sunrise temperature in degrees Celsius (`18.0 °C` for Kathmandu).
+    pub temp_celsius: f64,
+}
 
+impl TopocentricAtmosphere {
+    /// Canonical Kathmandu Valley high-altitude atmosphere (`1,400 m`, `856 hPa`, `18 °C`).
+    #[inline]
+    pub const fn kathmandu() -> Self {
+        Self {
+            elevation_m: KATHMANDU_ELEVATION_M,
+            pressure_hpa: KATHMANDU_PRESSURE_HPA,
+            temp_celsius: KATHMANDU_TEMP_CELSIUS,
+        }
+    }
+
+    /// Standard sea-level reference atmosphere (`0 m`, `1,010 hPa`, `10 °C`).
+    #[inline]
+    pub const fn sea_level() -> Self {
+        Self {
+            elevation_m: 0.0,
+            pressure_hpa: 1_010.0,
+            temp_celsius: 10.0,
+        }
+    }
+}
+
+impl Default for TopocentricAtmosphere {
+    fn default() -> Self {
+        Self::kathmandu()
+    }
+}
+
+/// Detailed diagnostic breakdown of Kathmandu topocentric sunrise vs. standard sea-level sunrise.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TopocentricSunriseMetrics {
+    /// Two-pass refined UTC Julian Day of topocentric sunrise (with elevation dip, refraction, and `s_0 / R_AU`).
+    pub sunrise_jd_utc: f64,
+    /// Two-pass refined UTC Julian Day of standard flat-horizon sea-level sunrise (`Z = 90.8333°`).
+    pub sea_level_sunrise_jd_utc: f64,
+    /// Effective topocentric sunrise zenith distance in degrees (`~91.83°` at `1,400 m`).
+    pub zenith_deg: f64,
+    /// Geometric horizon depression `Δd = 0.0293° √h` in degrees.
+    pub horizon_dip_deg: f64,
+    /// Pressure- and temperature-compensated horizon refraction `R_atm` in degrees.
+    pub refraction_deg: f64,
+    /// Apparent solar semi-diameter `s_0 / R_AU` in degrees at the sunrise instant.
+    pub solar_semidiameter_deg: f64,
+    /// Equatorial horizontal solar parallax `π_0 / R_AU` in degrees at the sunrise instant.
+    pub solar_parallax_deg: f64,
+    /// Number of seconds by which high-altitude sunrise precedes sea-level sunrise (`(sea_level - topocentric) * 86400`).
+    pub altitude_advance_seconds: f64,
+}
+
+fn solve_hour_angle_sunrise_jd(
+    jd_utc_midnight: f64,
+    jd_eval: f64,
+    zenith_deg: f64,
+) -> f64 {
+    let (dec_deg, eot_minutes) = solar_declination_and_eot(jd_eval);
     let lat_rad = KATHMANDU_LAT_DEG.to_radians();
     let dec_rad = dec_deg.to_radians();
-    let zenith_rad = SUNRISE_ZENITH_DEG.to_radians();
+    let zenith_rad = zenith_deg.to_radians();
 
-    // Hour angle H0 at sunrise: cos(H0) = (cos(Z) - sin(φ)sin(δ)) / (cos(φ)cos(δ))
     let cos_h0 = (zenith_rad.cos() - lat_rad.sin() * dec_rad.sin())
         / (lat_rad.cos() * dec_rad.cos());
-    let clamped_cos = cos_h0.clamp(-1.0, 1.0);
-    let h0_deg = clamped_cos.acos().to_degrees();
+    let h0_deg = cos_h0.clamp(-1.0, 1.0).acos().to_degrees();
 
-    // Solar noon in UTC minutes from 00:00 UTC:
-    // 720 - 4 * longitude - EquationOfTime
     let solar_noon_utc_min = 720.0 - 4.0 * KATHMANDU_LON_DEG - eot_minutes;
     let sunrise_utc_min = solar_noon_utc_min - 4.0 * h0_deg;
 
     jd_utc_midnight + sunrise_utc_min / 1440.0
+}
+
+/// Computes the two-pass refined high-altitude topocentric sunrise and diagnostic breakdown
+/// for Kathmandu (`27.7172° N, 85.3240° E`) on the civil date whose UTC midnight is `jd_utc_midnight`.
+pub fn kathmandu_topocentric_sunrise(
+    jd_utc_midnight: f64,
+    atmosphere: TopocentricAtmosphere,
+) -> TopocentricSunriseMetrics {
+    let jd_probe = jd_utc_midnight + 0.01;
+
+    // Two-pass sea-level reference sunrise (Z = 90.8333°)
+    let sea_pass1 = solve_hour_angle_sunrise_jd(jd_utc_midnight, jd_probe, SUNRISE_ZENITH_DEG);
+    let sea_level_sunrise_jd_utc =
+        solve_hour_angle_sunrise_jd(jd_utc_midnight, sea_pass1, SUNRISE_ZENITH_DEG);
+
+    // Pass 1 topocentric sunrise using initial probe
+    let z_pass1 = topocentric_sunrise_zenith_at_jd_deg(
+        jd_probe,
+        atmosphere.elevation_m,
+        atmosphere.pressure_hpa,
+        atmosphere.temp_celsius,
+    );
+    let topo_pass1 = solve_hour_angle_sunrise_jd(jd_utc_midnight, jd_probe, z_pass1);
+
+    // Pass 2 topocentric sunrise evaluated at Pass 1 sunrise instant
+    let horizon_dip_deg = geometric_horizon_dip_deg(atmosphere.elevation_m);
+    let refraction_deg =
+        atmospheric_refraction_horizon_deg(atmosphere.pressure_hpa, atmosphere.temp_celsius);
+    let solar_semidiameter_deg = solar_semidiameter_deg(topo_pass1);
+    let solar_parallax_deg = solar_horizontal_parallax_deg(topo_pass1);
+    let zenith_deg =
+        90.0 + horizon_dip_deg + refraction_deg + solar_semidiameter_deg - solar_parallax_deg;
+
+    let sunrise_jd_utc = solve_hour_angle_sunrise_jd(jd_utc_midnight, topo_pass1, zenith_deg);
+    let altitude_advance_seconds = (sea_level_sunrise_jd_utc - sunrise_jd_utc) * 86_400.0;
+
+    TopocentricSunriseMetrics {
+        sunrise_jd_utc,
+        sea_level_sunrise_jd_utc,
+        zenith_deg,
+        horizon_dip_deg,
+        refraction_deg,
+        solar_semidiameter_deg,
+        solar_parallax_deg,
+        altitude_advance_seconds,
+    }
+}
+
+/// Computes the exact UTC Julian Day of local topocentric sunrise in Kathmandu (`1,400 m`, `856 hPa`)
+/// for a civil date whose UTC midnight is `jd_utc_midnight`.
+pub fn kathmandu_sunrise_jd_utc(jd_utc_midnight: f64) -> f64 {
+    kathmandu_topocentric_sunrise(jd_utc_midnight, TopocentricAtmosphere::kathmandu())
+        .sunrise_jd_utc
 }
 
 /// Maps an astronomical Sankranti transit instant (`transit_jd_utc`) to the integer

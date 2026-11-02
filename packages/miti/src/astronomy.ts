@@ -350,16 +350,62 @@ export function topocentricSunriseZenithAtJdDeg(
 }
 
 /**
- * Computes the UTC Julian Day of local sunrise in Kathmandu for a civil date
- * whose UTC midnight is `jdUtcMidnight`.
+ * Topocentric atmospheric and elevation parameters for an observing station.
  */
-export function kathmanduSunriseJdUtc(jdUtcMidnight: number): number {
-  const jdProbe = jdUtcMidnight + 0.01;
-  const { declinationDeg, eotMinutes } = solarDeclinationAndEot(jdProbe);
+export interface TopocentricAtmosphere {
+  /** Observer elevation above mean sea level in meters (`1,400 m` for Kathmandu). */
+  elevationM: number;
+  /** Local barometric pressure in hectopascals (`856.0 hPa` for Kathmandu). */
+  pressureHpa: number;
+  /** Local ambient sunrise temperature in degrees Celsius (`18.0 °C` for Kathmandu). */
+  tempCelsius: number;
+}
 
+/** Canonical Kathmandu Valley high-altitude atmosphere (`1,400 m`, `856 hPa`, `18 °C`). */
+export const KATHMANDU_DEFAULT_ATMOSPHERE: Readonly<TopocentricAtmosphere> = {
+  elevationM: KATHMANDU_ELEVATION_M,
+  pressureHpa: KATHMANDU_PRESSURE_HPA,
+  tempCelsius: KATHMANDU_TEMP_CELSIUS,
+};
+
+/** Standard sea-level reference atmosphere (`0 m`, `1,010 hPa`, `10 °C`). */
+export const SEA_LEVEL_STANDARD_ATMOSPHERE: Readonly<TopocentricAtmosphere> = {
+  elevationM: 0.0,
+  pressureHpa: 1010.0,
+  tempCelsius: 10.0,
+};
+
+/**
+ * Detailed diagnostic breakdown of Kathmandu topocentric sunrise vs. standard sea-level sunrise.
+ */
+export interface TopocentricSunriseMetrics {
+  /** Two-pass refined UTC Julian Day of topocentric sunrise (with elevation dip, refraction, and `s_0 / R_AU`). */
+  sunriseJdUtc: number;
+  /** Two-pass refined UTC Julian Day of standard flat-horizon sea-level sunrise (`Z = 90.8333°`). */
+  seaLevelSunriseJdUtc: number;
+  /** Effective topocentric sunrise zenith distance in degrees (`~91.83°` at `1,400 m`). */
+  zenithDeg: number;
+  /** Geometric horizon depression `Δd = 0.0293° √h` in degrees. */
+  horizonDipDeg: number;
+  /** Pressure- and temperature-compensated horizon refraction `R_atm` in degrees. */
+  refractionDeg: number;
+  /** Apparent solar semi-diameter `s_0 / R_AU` in degrees at the sunrise instant. */
+  solarSemidiameterDeg: number;
+  /** Equatorial horizontal solar parallax `π_0 / R_AU` in degrees at the sunrise instant. */
+  solarParallaxDeg: number;
+  /** Number of seconds by which high-altitude sunrise precedes sea-level sunrise (`(seaLevel - topocentric) * 86400`). */
+  altitudeAdvanceSeconds: number;
+}
+
+function solveHourAngleSunriseJd(
+  jdUtcMidnight: number,
+  jdEval: number,
+  zenithDeg: number
+): number {
+  const { declinationDeg, eotMinutes } = solarDeclinationAndEot(jdEval);
   const latRad = KATHMANDU_LAT_DEG * DEG_TO_RAD;
   const decRad = declinationDeg * DEG_TO_RAD;
-  const zenithRad = SUNRISE_ZENITH_DEG * DEG_TO_RAD;
+  const zenithRad = zenithDeg * DEG_TO_RAD;
 
   const cosH0 =
     (Math.cos(zenithRad) - Math.sin(latRad) * Math.sin(decRad)) /
@@ -371,6 +417,67 @@ export function kathmanduSunriseJdUtc(jdUtcMidnight: number): number {
   const sunriseUtcMin = solarNoonUtcMin - 4.0 * h0Deg;
 
   return jdUtcMidnight + sunriseUtcMin / 1440.0;
+}
+
+/**
+ * Computes the two-pass refined high-altitude topocentric sunrise and diagnostic breakdown
+ * for Kathmandu (`27.7172° N, 85.3240° E`) on the civil date whose UTC midnight is `jdUtcMidnight`.
+ */
+export function kathmanduTopocentricSunrise(
+  jdUtcMidnight: number,
+  atmosphere: TopocentricAtmosphere = KATHMANDU_DEFAULT_ATMOSPHERE
+): TopocentricSunriseMetrics {
+  const jdProbe = jdUtcMidnight + 0.01;
+
+  // Two-pass sea-level reference sunrise (Z = 90.8333°)
+  const seaPass1 = solveHourAngleSunriseJd(jdUtcMidnight, jdProbe, SUNRISE_ZENITH_DEG);
+  const seaLevelSunriseJdUtc = solveHourAngleSunriseJd(
+    jdUtcMidnight,
+    seaPass1,
+    SUNRISE_ZENITH_DEG
+  );
+
+  // Pass 1 topocentric sunrise using initial probe
+  const zPass1 = topocentricSunriseZenithAtJdDeg(
+    jdProbe,
+    atmosphere.elevationM,
+    atmosphere.pressureHpa,
+    atmosphere.tempCelsius
+  );
+  const topoPass1 = solveHourAngleSunriseJd(jdUtcMidnight, jdProbe, zPass1);
+
+  // Pass 2 topocentric sunrise evaluated at Pass 1 sunrise instant
+  const horizonDipDeg = geometricHorizonDipDeg(atmosphere.elevationM);
+  const refractionDeg = atmosphericRefractionHorizonDeg(
+    atmosphere.pressureHpa,
+    atmosphere.tempCelsius
+  );
+  const sdDeg = solarSemidiameterDeg(topoPass1);
+  const parallaxDeg = solarHorizontalParallaxDeg(topoPass1);
+  const zenithDeg = 90.0 + horizonDipDeg + refractionDeg + sdDeg - parallaxDeg;
+
+  const sunriseJdUtc = solveHourAngleSunriseJd(jdUtcMidnight, topoPass1, zenithDeg);
+  const altitudeAdvanceSeconds = (seaLevelSunriseJdUtc - sunriseJdUtc) * 86400.0;
+
+  return {
+    sunriseJdUtc,
+    seaLevelSunriseJdUtc,
+    zenithDeg,
+    horizonDipDeg,
+    refractionDeg,
+    solarSemidiameterDeg: sdDeg,
+    solarParallaxDeg: parallaxDeg,
+    altitudeAdvanceSeconds,
+  };
+}
+
+/**
+ * Computes the UTC Julian Day of local topocentric sunrise in Kathmandu (`1,400 m`, `856 hPa`)
+ * for a civil date whose UTC midnight is `jdUtcMidnight`.
+ */
+export function kathmanduSunriseJdUtc(jdUtcMidnight: number): number {
+  return kathmanduTopocentricSunrise(jdUtcMidnight, KATHMANDU_DEFAULT_ATMOSPHERE)
+    .sunriseJdUtc;
 }
 
 /**

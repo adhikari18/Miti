@@ -22,8 +22,9 @@ pub use sankranti::{
 };
 pub use sunrise::{
     atmospheric_refraction_horizon_deg, geometric_horizon_dip_deg, kathmandu_sunrise_jd_utc,
-    sankranti_to_civil_day_jd_utc, topocentric_sunrise_zenith_at_jd_deg,
-    topocentric_sunrise_zenith_deg, KATHMANDU_ELEVATION_M, KATHMANDU_LAT_DEG, KATHMANDU_LON_DEG,
+    kathmandu_topocentric_sunrise, sankranti_to_civil_day_jd_utc,
+    topocentric_sunrise_zenith_at_jd_deg, topocentric_sunrise_zenith_deg, TopocentricAtmosphere,
+    TopocentricSunriseMetrics, KATHMANDU_ELEVATION_M, KATHMANDU_LAT_DEG, KATHMANDU_LON_DEG,
     KATHMANDU_PRESSURE_HPA, KATHMANDU_TEMP_CELSIUS,
 };
 pub use vsop87::{
@@ -102,6 +103,23 @@ mod tests {
             KATHMANDU_TEMP_CELSIUS,
         );
         assert!(z_ktm > 91.80 && z_ktm < 91.86);
+    }
+
+    #[test]
+    fn test_kathmandu_solstice_sunrise_altitude_shift() {
+        let jd_summer_solstice = gregorian_to_jd(2026, 6, 21.0);
+        let jd_winter_solstice = gregorian_to_jd(2026, 12, 21.0);
+
+        let summer =
+            kathmandu_topocentric_sunrise(jd_summer_solstice, TopocentricAtmosphere::kathmandu());
+        let winter =
+            kathmandu_topocentric_sunrise(jd_winter_solstice, TopocentricAtmosphere::kathmandu());
+
+        // At 1,400 m elevation in Kathmandu, sunrise occurs ~260–315 seconds (~4.4–5.2 min) earlier than at sea level
+        assert!(summer.altitude_advance_seconds > 260.0 && summer.altitude_advance_seconds < 320.0);
+        assert!(winter.altitude_advance_seconds > 260.0 && winter.altitude_advance_seconds < 320.0);
+        assert!(summer.sunrise_jd_utc < summer.sea_level_sunrise_jd_utc);
+        assert!(winter.sunrise_jd_utc < winter.sea_level_sunrise_jd_utc);
     }
 }
 
