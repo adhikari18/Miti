@@ -44,3 +44,4 @@ jobs:
 
       - name: Run Vitest unit test suite
         run: npm test
+

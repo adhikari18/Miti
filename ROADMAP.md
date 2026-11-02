@@ -72,3 +72,4 @@ While Bikram Sambat civil dates (*Gate* / गते) are purely solar, Nepali fe
   - Use lunar node (*Rahu/Ketu*) proximity at *Purnima* and *Amavasya* to detect solar and lunar eclipses visible from the Himalaya.
 - [ ] **5.4 Property-Based Fuzzing (`proptest` / `fast-check`) Across 500 Years (~4 hrs):**
   - Add property-based test suites verifying monotonic date ordering, bijection invariants (`toGregorian(fromGregorian(d)) == d`), and zero panics across `1700 CE – 2300 CE`.
+

@@ -17,3 +17,4 @@ $$\text{Tithi}(\text{JD}) = \left\lfloor \frac{(\lambda_{\text{Moon}}(\text{JD})
 1. Create `crates/miti-core/src/lunar.rs` implementing Meeus Ch. 47 / truncated ELP-2000 periodic terms for apparent lunar ecliptic longitude $\lambda_{\text{Moon}}$ (accurate to $< 10''$).
 2. Implement `tithi_at_sunrise(jd_utc: f64) -> TithiInfo` (returning *Paksha*: `Shukla` vs. `Krishna`, Tithi index `1..=30`, and exact Tithi end timestamp).
 3. Detect **Adhika Masa** (*Malamasa* / lunar leap month when a lunar synodic month contains zero solar *Sankranti* transits) and **Kshaya Masa** (when a lunar month contains two *Sankrantis*).
+

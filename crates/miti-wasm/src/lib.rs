@@ -42,3 +42,4 @@ pub fn sankranti_transit_jd_wasm(bs_year: i32, bs_month: u8) -> f64 {
 pub fn month_lengths_for_bs_year_wasm(bs_year: i32) -> Vec<u8> {
     (1..=12).map(|m| days_in_bs_month(bs_year, m)).collect()
 }
+

@@ -15,3 +15,4 @@ assignees: ""
 1. Add `startOfMonth(): MitiDate`, `endOfMonth(): MitiDate`, `addMonths(n: number): MitiDate`, and `diffInDays(other: MitiDate): number` to `MitiDate` in `packages/miti/src/index.ts`.
 2. Implement a `BikramSambatTemporalCalendar` class exposing `year(date)`, `month(date)`, `day(date)`, `daysInMonth(date)`, and `daysInYear(date)`.
 3. Add unit tests in `packages/miti/test/miti.test.ts` covering month-boundary arithmetic across 29-, 30-, 31-, and 32-day B.S. months.
+

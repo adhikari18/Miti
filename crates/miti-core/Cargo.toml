@@ -8,3 +8,4 @@ repository.workspace = true
 description = "Pure-math Bikram Sambat (B.S.) astronomical date engine using VSOP87 solar mechanics, Lahiri Ayanamsa, and Kathmandu topocentric sunrise calibration."
 
 [dependencies]
+

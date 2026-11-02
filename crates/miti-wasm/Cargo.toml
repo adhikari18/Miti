@@ -13,3 +13,4 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 miti-core = { path = "../miti-core" }
 wasm-bindgen = "0.2"
+

@@ -70,3 +70,4 @@ pub fn sankranti_to_civil_day_jd_utc(transit_jd_utc: f64) -> f64 {
     // Return the 00:00 UTC Julian Day corresponding to that civil date
     effective_day_index - 0.5
 }
+

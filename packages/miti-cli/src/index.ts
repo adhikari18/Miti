@@ -103,3 +103,4 @@ if (cmd === 'today') {
 } else {
   printHelp();
 }
+

@@ -15,3 +15,4 @@ Pure astronomical ephemeris computation (`VSOP87` + `Chitra Paksha Ayanamsa`) ac
 1. Define a compact `const ANOMALY_DELTAS: &[(i16, u8, i8)]` sparse array in `crates/miti-core/src/sankranti.rs` storing only `(bs_year, bs_month, day_shift)` for verified historical overrides.
 2. Expose `ConversionMode::PureAstronomical` vs. `ConversionMode::CivilHybrid` in both Rust (`miti-core`) and TypeScript (`miti`).
 3. Add regression tests comparing both modes across historical boundary dates.
+

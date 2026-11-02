@@ -17,3 +17,4 @@ Near critical edge-case *Sankranti* transits (within $\pm 4$ minutes of the civi
 1. Implement `topocentric_sunrise_zenith_deg(elevation_m: f64, pressure_hpa: f64, temp_celsius: f64) -> f64` in `crates/miti-core/src/sunrise.rs` and `packages/miti/src/astronomy.ts`.
 2. Incorporate solar semi-diameter variation ($s = s_0 / R_{\text{AU}}$) based on Earth-Sun radius vector $R$.
 3. Add unit tests verifying the sunrise shift (in seconds) at $h = 1,400\text{ m}$ across summer and winter solstices.
+

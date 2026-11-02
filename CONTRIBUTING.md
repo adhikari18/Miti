@@ -57,3 +57,4 @@ See [`ROADMAP.md`](./ROADMAP.md) for the complete 115+ hour multi-phase engineer
 ## License
 
 By contributing to `Miti`, you agree that your contributions will be licensed under the [MIT License](./LICENSE).
+

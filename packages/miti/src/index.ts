@@ -516,3 +516,4 @@ export const Miti = {
   toDevanagariDigits,
   fromDevanagariDigits,
 };
+

@@ -103,3 +103,4 @@ pub fn solar_declination_and_eot(jd_utc: f64) -> (f64, f64) {
     let eot_minutes = eot_rad.to_degrees() * 4.0;
     (dec_deg, eot_minutes)
 }
+
