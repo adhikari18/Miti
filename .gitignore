@@ -1,0 +1,28 @@
+# Rust / Cargo build artifacts
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Node / TypeScript dependencies & build outputs
+node_modules/
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Testing & coverage
+coverage/
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# Local notes & scratch
+idea/
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
