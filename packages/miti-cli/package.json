@@ -1,0 +1,17 @@
+{
+  "name": "miti-cli",
+  "version": "0.1.0",
+  "description": "Fast terminal CLI for pure-math Bikram Sambat (B.S.) astronomical date conversion and Sankranti inspection.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "miti": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "miti": "0.1.0"
+  }
+}
